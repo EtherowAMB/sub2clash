@@ -1,0 +1,82 @@
+# 放到仓库的 .github/workflows/build-windows-amd64.yml
+# 用途：在 GitHub Actions 上编译 Windows amd64 的 sub2clash.exe
+#
+# 关键点：仓库里没有 server/frontend/dist（被 .gitignore 忽略），
+# 而 server/route.go 里有 //go:embed frontend/dist，
+# 所以必须先构建前端，否则 go build 会报 "pattern frontend/dist: no matching files found"。
+
+name: build-windows-amd64
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build frontend (must run before go build)
+        working-directory: server/frontend
+        env:
+          VITE_APP_VERSION: ${{ github.ref_name }}
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build Windows amd64 exe
+        env:
+          CGO_ENABLED: "0"
+          GOOS: windows
+          GOARCH: amd64
+        run: |
+          go build -trimpath \
+            -ldflags="-s -w -X github.com/bestnite/sub2clash/constant.Version=${GITHUB_REF_NAME}" \
+            -o sub2clash.exe .
+
+      - name: Package exe + runtime files
+        run: |
+          rm -rf package
+          mkdir -p package
+          cp sub2clash.exe package/
+          cp -r templates package/
+          cp README.md LICENSE package/
+          # 生成 config.yaml：模板走 exe 同目录的 templates/，不联网拉模板
+          cat > package/config.yaml <<'EOF'
+          # 模板从本目录 templates/ 读取（相对路径，仅文件名，不要写 templates/ 前缀）
+          address: "0.0.0.0:8011"
+          meta_template: "template_meta.yaml"
+          clash_template: "template_clash.yaml"
+          # 订阅数据缓存时间（秒）：小于该年龄的本地缓存不再重新下载
+          cache_expire: 300
+          request_retry_times: 3
+          request_max_file_size: 1048576
+          log_level: "info"
+          short_link_length: 6
+          EOF
+          cd package
+          zip -r ../sub2clash-windows-amd64.zip .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sub2clash-windows-amd64
+          path: sub2clash-windows-amd64.zip
+          if-no-files-found: error
