@@ -1,0 +1,47 @@
+version: 2
+project_name: sub2clash
+before:
+  hooks:
+    - bash ./build-frontend.sh {{ .Version }}
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X github.com/bestnite/sub2clash/constant.Version={{ .Version }}
+    flags:
+      - -trimpath
+archives:
+  - formats: ["tar.gz"]
+    format_overrides:
+      - formats: ["zip"]
+        goos: windows
+    wrap_in_directory: true
+    files:
+      - LICENSE
+      - README.md
+      - templates
+release:
+  draft: true
+# upx:
+#   - enabled: true
+#     compress: best
+nfpms:
+  - id: sub2clash
+    homepage: https://github.com/bestnite/sub2clash
+    maintainer: Nite <admin@nite07.com>
+    license: "MIT"
+    formats:
+      - apk
+      - deb
+      - rpm
+      - termux.deb
+      - archlinux
+    provides:
+      - sub2clash

@@ -1,0 +1,10 @@
+.idea
+dist
+subs
+logs
+data
+.env
+config.yaml
+config.yml
+config.json
+.codex
